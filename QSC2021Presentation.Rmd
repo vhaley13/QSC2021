@@ -1,0 +1,1306 @@
+---
+title: "Wrangling and Visualizing Census Data with R"
+author: "Pearse Haley"
+date: "11/4/2021"
+output: 
+  powerpoint_presentation:
+    df_print: "kable"
+---
+
+```{r setup, include=FALSE}
+library(tidycensus)
+# library(tidyverse)
+library(tigris)
+options(tigris_use_cache = TRUE)
+
+key <- c("ddd0c5f47ae1fa167dbcbc7804b46ef9e76d45e2")
+census_api_key(key) 
+
+knitr::opts_chunk$set(echo = FALSE)
+
+```
+
+```{r kableextra, include=FALSE}
+library(dplyr)
+library(knitr)
+library(kableExtra)
+library(formattable)
+library(DT)
+library(data.table)
+
+dt <- mtcars[1:5, 1:6]
+#styles
+kable(dt) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+#floating text for wrapping
+kable(dt) %>%
+  kable_styling(bootstrap_options = "striped", full_width = F, position = "float_right")
+#font
+kable(dt) %>%
+  kable_styling(bootstrap_options = "striped", font_size = 7)
+#fixed table header
+kable(mtcars[1:10, 1:5]) %>%
+  kable_styling(fixed_thead = T)
+#columns
+mtcars[1:8, 1:8] %>%
+  kable() %>%
+  kable_styling(full_width = F) %>%
+  column_spec(2, color = spec_color(mtcars$mpg[1:8])) %>%
+  column_spec(6, color = "white",
+              background = spec_color(mtcars$drat[1:8], end = 0.7))
+#rows
+kable(dt) %>%
+  kable_styling(bootstrap_options = "striped", full_width = F) %>%
+  column_spec(5:7, bold = T) %>%
+  row_spec(3:5, bold = T, color = "white", background = "#D7261E")
+#no columns
+kable(dt, col.names = NULL) 
+#images
+# tbl_img <- data.frame(
+#   name = c("kableExtra 1", "kableExtra 2"),
+#   logo = ""
+# )
+# tbl_img %>%
+#   kable(booktabs = T) %>%
+#   kable_paper(full_width = F) %>%
+#   column_spec(2, image = spec_image(
+#     c("kableExtra_sm.png", "kableExtra_sm.png"), 50, 50))
+
+# library(formattable)
+# library(DT)
+# plain_formatter <- formatter("span")
+# plain_formatter(c(1, 2, 3))
+# width_formatter <- formatter("span",
+#   style = x ~ style(width = suffix(x, "px")))
+# width_formatter(c(10, 11, 12))
+# sign_formatter <- formatter("span", 
+#   style = x ~ style(color = ifelse(x > 0, "green", 
+#     ifelse(x < 0, "red", "black"))))
+# sign_formatter(c(-1, 0, 1))
+#cross formatting
+# scores <- data.frame(id = 1:5,
+#   prev_score = c(10, 8, 6, 8, 8),
+#   cur_score = c(8, 9, 7, 8, 9),
+#   change = c(-2, 1, 1, 0, 1))
+# 
+# formattable(scores, list(
+#   cur_score = formatter("span", 
+#     style = ~ style(color = ifelse(change >= 0, "green", "red")))))
+# formattable(scores, list(prev_score = FALSE))
+#built-in formatting
+# products <- data.frame(id = 1:5, 
+#   price = c(10, 15, 12, 8, 9),
+#   rating = c(5, 4, 4, 3, 4),
+#   market_share = percent(c(0.1, 0.12, 0.05, 0.03, 0.14)),
+#   revenue = accounting(c(55000, 36400, 12000, -25000, 98100)),
+#   profit = accounting(c(25300, 11500, -8200, -46000, 65000)))
+# 
+# products
+# 
+# formattable(products)
+# 
+# formattable(products, list(
+#   price = color_tile("transparent", "lightpink"),
+#   rating = color_bar("lightgreen"),
+#   market_share = color_bar("lightblue"),
+#   revenue = sign_formatter,
+#   profit = sign_formatter))
+#area formatting
+# set.seed(123)
+# df <- data.frame(id = 1:10, 
+#   a = rnorm(10), b = rnorm(10), c = rnorm(10))
+# formattable(df, list(area(col = a:c) ~ color_tile("transparent", "pink")))
+#convert to DT
+# as.datatable(formattable(products, list(
+#   price = color_tile("transparent", "lightpink"),
+#   revenue = sign_formatter,
+#   profit = sign_formatter)))
+#kable integration
+# ft_dt <- mtcars[1:5, 1:4]
+# ft_dt$car <- row.names(ft_dt)
+# row.names(ft_dt) <- NULL
+# ft_dt$mpg <- color_tile("white", "orange")(ft_dt$mpg)
+# ft_dt$cyl <- cell_spec(ft_dt$cyl, angle = (1:5)*60, 
+#                       background = "red", color = "white", align = "center")
+# ft_dt$disp <- ifelse(
+#   ft_dt$disp > 200,
+#   cell_spec(ft_dt$disp, color = "red", bold = T),
+#   cell_spec(ft_dt$disp, color = "green", italic = T)
+# )
+# ft_dt$hp <- color_bar("lightgreen")(ft_dt$hp)
+# ft_dt <- ft_dt[c("car", "mpg", "cyl", "disp", "hp")]
+# 
+# kable(ft_dt, escape = F) %>%
+#   kable_styling("hover", full_width = F) %>%
+#   column_spec(5, width = "3cm") %>%
+#   add_header_above(c(" ", "Hello" = 2, "World" = 2))
+```
+
+
+## US Census Data
+- Decennial Census – full count for apportionment every 10 years
+- American Community Survey – Source of estimated demographic data about the US population, sample of about 3% of US population.
+  - 1-year ACS (areas with population of 65,000 or greater)
+  - 5-year ACS (moving 5-year average for all areas down to block group)
+
+## US Census Data
+- Census Bureau conducts hundreds of other surveys and shares data on a wide range of subjects with the public. 
+- Economic and business surveys, housing surveys, international data, population estimates and projections, and more.
+
+## Census Hierarchy
+- Data from the decennial Census, ACS, and other Census surveys are aggregated and shared at different  geographies. 
+  - Legal entities, such as states and counties
+  - Statistical entities, not official jurisdictions but used to standardize data
+  - Smallest unit for decennial is block, block group for ACS
+  
+## Census Hierarchy
+![Source: US Census Bureau.](/Users/victorhaley/Pictures/censushierarchy.png)
+## Census Data and R
+- There are many packages designed to help analysts work with Census data
+- What package(s) do I need? Which data am I using? From where?
+- Downloading bulk files from the Census FTP site is imprecise and using data.census.gov is inefficient
+- That leaves Census API or 3rd party providers
+- Choice depends on specific data needs (variables, geography, survey, timeframe, level of detail)
+
+## Census API? Use tidycensus
+- Tidycensus!
+  - Created by Kyle Walker (https://walker-data.com/)
+- The package has two main goals: 
+  - "First, tidycensus aims to make Census data available to R users in a tidyverse-friendly format, helping kick-start the process of generating insights from US Census data." 
+  - "Second, the package is designed to streamline the data wrangling process for spatial Census data analysts...R users can request geometry along with attributes for their Census data, helping facilitate mapping and spatial analysis”
+- Tigris also pulls geographic boundary files
+- Add package logos
+
+## Getting started with tidycensus
+- Get a free Census API Key from https://api.census.gov/data/key_signup.html and activate it
+```{r, echo=TRUE}
+# install.packages("tidycensus", repos = "http://cran.us.r-project.org")
+# install.packages("tigris", repos = "http://cran.us.r-project.org")
+library(tidycensus)
+library(tigris)
+# stores boundaries in cache to preserve memory
+options(tigris_use_cache = TRUE)
+# census_api_key("YOUR KEY GOES HERE", install = TRUE)
+# only need to include install = TRUE once
+```
+
+## Pulling Data: get_decennial() 
+- Pulls decennial Census data from the 2000, 2010, and 2020 decennial US Censuses.
+- Users must include 
+  - requested geography
+  - a vector of Census variable IDs
+  - a Census table ID (optional)
+  
+## Pulling Data: get_decennial() 
+- The following code below gets data on total population by state from the 2010 decennial Census
+```{r, echo=TRUE}
+total_population_10 <- get_decennial(
+  geography = "state", 
+  variables = "P001001",
+  year = 2010
+)
+```
+```{r total_population_10, rows.print=15}
+knitr::opts_chunk$set(echo = TRUE, rows.print=15)
+total_population_10
+```
+## Pulling Data: get_acs() 
+- Pulls data from annual ACS
+- Parameters
+  - geography
+  - variables
+  - table id
+  - year (defaults to the most recent five-year ACS sample)
+  - survey (defaults to the 5-year ACS, can be changed to the 1-year ACS by using survey = "acs1")
+- Similar to data from get_decennial(), but includes columns for estimate (for the ACS estimate) and moe (for the margin of error around that estimate) instead of value 
+
+## Pulling Data: get_acs()
+- Differences between samples
+```{r, echo=TRUE}
+born_in_mexico <- get_acs(
+  geography = "state", 
+  variables = "B05006_150",
+  year = 2019
+)
+born_in_mexico
+```
+```{r, echo=TRUE}
+born_in_mexico_1yr <- get_acs(
+  geography = "state", 
+  variables = "B05006_150", 
+  survey = "acs1",
+  year = 2019
+)
+born_in_mexico_1yr
+```
+
+## Pulling Data: get_acs()
+- Variables from the ACS detailed tables, data profiles, summary tables, and supplemental estimates are available 
+- Supplying a table name to the table parameter returns all variables for that table
+- To get all variables associated with table B01001 (sex by age), from the 2015-2019 5-year ACS:
+```{r, echo=TRUE}
+age_table <- get_acs(
+  geography = "state", 
+  table = "B01001",
+  year = 2019
+)
+age_table
+```
+
+## Pulling Data: get_acs()
+- To get data from within specific states and/or counties, isers can pass state and county names to the state and county parameters
+```{r, echo=TRUE}
+ga_income <- get_acs(
+  geography = "county", 
+  variables = "B19013_001", 
+  state = "GA",
+  year = 2019
+)
+ga_income
+
+fulton_income <- get_acs(
+  geography = "tract", 
+  variables = "B19013_001", 
+  state = "GA", 
+  county = "Fulton"
+)
+fulton_income
+```
+
+## Pulling Data: Loading Variables
+- load_variables() returns a dataset of variables from the Census Bureau website and formats it for fast searching
+- two required arguments
+  - year of the Census dataset or ACS sample
+  - dataset name (sf1, sf3, pl, acs1, or acs5)
+    - For ACS datasets, append /profile for the Data Profile, and /summary for the Summary Tables. 
+- user can include cache = TRUE in the function call to store the data in the user’s cache directory for faster processing
+```{r, echo=TRUE}
+v19 <- load_variables(2019, "acs5", cache = TRUE)
+View(v19)
+```
+
+## Pulling Data: Loading Variables
+```{r, echo=TRUE}
+ga_wide <- get_acs(
+  geography = "county",
+  state = "Georgia",
+  variables = c(medinc = "B19013_001",
+                medage = "B01002_001"),
+  output = "wide"
+)
+ga_wide
+```
+
+## Pulling Data: Choosing a Data Structure
+- By default, tidycensus returns a tibble in “tidy” format:
+  - Each observation forms a row;
+  - Each variable forms a column;
+  - Each observational unit forms a table
+  
+## Pulling Data: Choosing a Data Structure 
+Tidy
+```{r, echo=TRUE}
+hhinc <- get_acs(
+  geography = "state", 
+  table = "B19001", 
+  survey = "acs1",
+  year = 2016
+)
+hhinc
+```
+
+## Pulling Data: Choosing a Data Structure 
+Wide
+```{r, echo=TRUE, , cols.print=8}
+hhinc_wide <- get_acs(
+  geography = "state", 
+  table = "B19001", 
+  survey = "acs1", 
+  year = 2016,
+  output = "wide"
+)
+hhinc_wide
+```
+
+## Manipulating Data: Using tidyverse Tools
+```{r, echo=TRUE, cols.print=10}
+library(tidyverse)
+library(dplyr)
+median_age <- get_acs(
+  geography = "county",
+  variables = "B01002_001",
+  year = 2019
+) %>%
+arrange(desc(estimate)) %>%
+filter(estimate >= 50) %>%
+separate(
+  NAME,
+  into = c("county", "state"),
+  sep = ", "
+)
+median_age
+```
+
+## Manipulating Data: Creating New Variables
+Summary variables
+```{r, echo=TRUE, cols.print=10}
+race_vars <- c(
+  White = "B03002_003",
+  Black = "B03002_004",
+  Native = "B03002_005",
+  Asian = "B03002_006",
+  HIPI = "B03002_007",
+  Hispanic = "B03002_012"
+)
+
+ga_race <- get_acs(
+  geography = "county",
+  state = "GA",
+  variables = race_vars,
+  summary_var = "B03002_001"
+) 
+ga_race
+```
+New Columns
+```{r, echo=TRUE, cols.print=10}
+ga_race_percent <- ga_race %>%
+  mutate(percent = 100 * (estimate / summary_est)) %>%
+  select(NAME, variable, percent)
+ga_race_percent
+```
+## Analysis: Creating and Comparing Groups
+- County Level Median Household Income for Alabama (2019)
+```{r, echo=TRUE, cols.print=10}
+al_hh_income <- get_acs(
+  geography = "county",
+  table = "B19001",
+  state = "AL",
+  year = 2019
+)
+al_hh_income
+```
+## Analysis: Creating and Comparing Groups
+- Recode
+```{r, echo=TRUE, cols.print=10}
+al_hh_income_recode <- al_hh_income %>%
+  filter(variable != "B19001_001") %>%
+  mutate(incgroup = case_when(
+    variable < "B19001_008" ~ "below35k", 
+    variable < "B19001_013" ~ "bw35kand75k", 
+    TRUE ~ "above75k"
+  )) 
+al_hh_income_recode
+```
+::: notes
+The first condition tells the function to assign the value of below35k to all rows with a variable value that comes before "B19001_008" (B19001_002 (income less than $10,000) through B19001_007 (income between $30,000 and $34,999)). 
+
+The second condition is then evaluated for all those rows not covered by the first condition. This means that case_when() knows not to assign "bw35kand75k" to the income group of $10,000 and below even though its variable comes before B19001_013. 
+
+Setting the final condition in case_when() to TRUE applies it to all other values.
+:::
+## Analysis: Creating and Comparing Groups
+- Create Group Summaries
+```{r, echo=TRUE, cols.print=10}
+al_group_sums <- al_hh_income_recode %>%
+  group_by(GEOID, incgroup) %>%
+  summarize(estimate = sum(estimate))
+al_group_sums
+```
+## Analysis: Time-Series
+```{r, echo=TRUE, cols.print=10}
+college_vars <- c("B15002_015",
+                  "B15002_016",
+                  "B15002_017",
+                  "B15002_018",
+                  "B15002_032",
+                  "B15002_033",
+                  "B15002_034",
+                  "B15002_035")
+years <- 2010:2019
+names(years) <- years
+
+college_by_year <- map_dfr(years, ~{
+  get_acs(
+    geography = "county",
+    variables = college_vars,
+    state = "FL",
+    summary_var = "B15002_001",
+    survey = "acs1",
+    year = .x
+  )
+}, .id = "year")
+
+college_by_year %>% 
+  arrange(NAME, variable, year)
+```
+::: notes
+We define a numeric vector of years from 2010 to 2019.  
+
+map_dfr() maps the get_acs() function to each year, resulting in data with estimates for each county for each specified year
+:::
+## Visualization: Basic
+```{r, echo=TRUE}
+metros <-  get_acs(
+  geography = "cbsa",
+  variables = "DP03_0021P",
+  summary_var = "B01003_001",
+  survey = "acs1",
+  year = 2019
+) %>%
+  slice_max(summary_est, n = 20)
+
+ggplot(metros, aes(x = NAME, y = estimate)) + 
+  geom_col()
+
+```
+## Visualization: Stylized
+```{r, echo=TRUE}
+metros %>%
+  mutate(NAME = str_remove(NAME, "-.*$")) %>%
+  mutate(NAME = str_remove(NAME, ",.*$")) %>%
+  ggplot(aes(y = reorder(NAME, estimate), x = estimate)) + 
+  geom_col(color = "navy", fill = "navy", 
+           alpha = 0.5, width = 0.85) +  
+  theme_minimal(base_size = 12, base_family = "Verdana") + 
+  scale_x_continuous(breaks = c(0, 10, 20, 30), 
+                     labels = c("0%","10%","20%","30%")) + 
+  labs(title = "Public transit commute share", 
+       subtitle = "2019 1-year ACS estimates", 
+       y = "", 
+       x = "ACS estimate", 
+       caption = "Source: ACS Data Profile variable DP03_0021P via the tidycensus R package") 
+```
+
+## Visualization: Margin of Error
+```{r, echo=TRUE}
+la_income <- get_acs(
+  state = "Louisiana",
+  geography = "county",
+  variables = c(hhincome = "B19013_001"),
+  year = 2019
+) %>%
+  mutate(NAME = str_remove(NAME, " County, Louisiana"))
+la_income
+```
+```{r, echo=TRUE}
+la_income %>% 
+  arrange(desc(moe))
+
+ggplot(la_income, aes(x = estimate, y = reorder(NAME, estimate))) + 
+  geom_errorbarh(aes(xmin = estimate - moe, xmax = estimate + moe)) + 
+  geom_point(size = 3, color = "darkgreen") + 
+  theme_minimal(base_size = 12.5) + 
+  labs(title = "Median household income", 
+       subtitle = "Counties in Louisiana", 
+       x = "2015-2019 ACS estimate", 
+       y = "") + 
+  scale_x_continuous(labels = scales::dollar)
+
+```
+## Visualization: Time-Series
+```{r, echo=TRUE}
+years <- 2005:2019
+names(years) <- years
+
+fulton_value <- map_dfr(years, ~{
+  get_acs(
+    geography = "county",
+    variables = "B25077_001",
+    state = "GA",
+    county = "Fulton",
+    year = .x,
+    survey = "acs1"
+  )
+}, .id = "year")
+
+ggplot(fulton_value, aes(x = year, y = estimate, group = 1)) + 
+  geom_line() + 
+  geom_point()
+```
+## Visualization: Time-Series
+```{r, echo=TRUE}
+ggplot(fulton_value, aes(x = year, y = estimate, group = 1)) + 
+  geom_ribbon(aes(ymax = estimate + moe, ymin = estimate - moe), 
+              fill = "navy",
+              alpha = 0.4) + 
+  geom_line(color = "navy") + 
+  geom_point(color = "navy", size = 2) + 
+  theme_minimal(base_size = 12) + 
+  scale_y_continuous(labels = scales::dollar) + 
+  labs(title = "Median home value in Fulton County, GA",
+       x = "Year",
+       y = "ACS estimate",
+       caption = "Shaded area represents margin of error around the ACS estimate")
+```
+## Visualization: Group Comparison
+```{r, echo=TRUE}
+housing_val <- get_acs(
+  geography = "tract", 
+  variables = "B25077_001", 
+  state = "GA", 
+  county = c(
+    "Fulton", 
+    "DeKalb", 
+    "Clayton",
+    "Cobb", 
+    "Gwinnett", 
+    "Henry"
+  )
+)
+housing_val2 <- separate(
+  housing_val, 
+  NAME, 
+  into = c("tract", "county", "state"), 
+  sep = ", "
+)
+housing_val2 %>%
+  group_by(county) %>%
+  summarize(min = min(estimate, na.rm = TRUE), 
+            mean = mean(estimate, na.rm = TRUE), 
+            median = median(estimate, na.rm = TRUE), 
+            max = max(estimate, na.rm = TRUE))
+```
+
+## Visualization: Group Comparison
+```{r, echo=TRUE}
+ggplot(housing_val2, aes(x = estimate)) + 
+  geom_density()
+
+ggplot(housing_val2, aes(x = estimate, fill = county)) + 
+  geom_density(alpha = 0.3)
+
+ggplot(housing_val2, aes(x = estimate)) +
+  geom_density(fill = "darkgreen", color = "darkgreen", alpha = 0.5) + 
+  facet_wrap(~county) + 
+  scale_x_continuous(labels = function(x) paste0("$", x / 1000, "k")) + 
+  theme_minimal(base_size = 14) + 
+  theme(axis.text.y = element_blank()) + 
+  labs(x = "ACS estimate",
+       y = "",
+       title = "Median home values by Census tract, 2015-2019 ACS")
+```
+
+## Incorporating Geographic Data
+- Census and ACS data are associated with/aggregated at geographies
+  - Legal entities (states and counties)
+  - Statistical entities (census tracts and block groups)
+  - Geographic features (roads and water features)
+- Represented in the US Census Bureau’s TIGER/Line database (Topologically Integrated Geographic Encoding and Referencing)
+- Includes a high-quality series of geographic shapefiles suitable for mapping and spatial analysis
+- tigris package allows to access these geographies directly from an R session
+- simple features (sf) package represents spatial data much like an R data frame, but with a special geometry column that represents the shape of each feature
+- add sf and tigris logos
+
+## Incorporating Geographic Data
+- Polygons, Points, and Lines
+```{r, echo=TRUE}
+library(tigris)
+
+st <- states()
+
+class(st)
+
+st
+
+plot(st$geometry)
+```
+## Incorporating Geographic Data
+- Polygons, Points, and Lines
+```{r, echo=TRUE}
+fl_counties <- counties("FL")
+
+plot(fl_counties$geometry)
+
+broward_tracts <- tracts("FL", "Broward")
+
+plot(broward_tracts$geometry)
+
+```
+
+## Incorporating Geographic Data
+- Polygons, Points, and Lines
+```{r, echo=TRUE}
+fl_counties <- counties("FL")
+
+plot(fl_counties$geometry)
+
+broward_tracts <- tracts("FL", "Broward")
+
+plot(broward_tracts$geometry)
+
+```
+
+## Incorporating Geographic Data
+- Polygons, Points, and Lines
+```{r, echo=TRUE}
+dc_landmarks <- landmarks("DC", type = "point")
+
+plot(dc_landmarks$geometry)
+
+dc_roads <- primary_secondary_roads("DC")
+
+plot(dc_roads$geometry)
+```
+
+## Mapping: Basic
+```{r, echo=TRUE}
+library(ggplot2)
+
+ggplot(broward_tracts) + 
+  geom_sf()
+# remove grid and coordinates
+ggplot(broward_tracts) + 
+  geom_sf() + 
+  theme_void()
+```
+## Mapping: Comparative
+```{r, echo=TRUE}
+library(cowplot)
+
+broward_block_groups <- block_groups("FL", "Broward")
+
+gg1 <- ggplot(broward_tracts) + 
+  geom_sf() + 
+  theme_void() + 
+  labs(title = "Census tracts")
+
+gg2 <- ggplot(broward_block_groups) + 
+  geom_sf() + 
+  theme_void() + 
+  labs(title = "Block groups")
+
+plot_grid(gg1, gg2)
+```
+
+## Mapping: TIGER/Line vs. Cartographic Boundaries
+```{r, echo=TRUE}
+ms_counties <- counties("MS")
+ms_counties_cb <- counties("MS", cb = TRUE)
+
+ms_tiger_gg <- ggplot(ms_counties) + 
+  geom_sf() + 
+  theme_void() + 
+  labs(title = "TIGER/Line")
+
+ms_cb_gg <- ggplot(ms_counties_cb) + 
+  geom_sf() + 
+  theme_void() + 
+  labs(title = "Cartographic boundary")
+
+plot_grid(ms_tiger_gg, ms_cb_gg)
+```
+## Mapping: Census Data
+```{r, echo=TRUE}
+library(tidycensus)
+library(tidyverse)
+library(tigris)
+options(tigris_use_cache = TRUE)
+
+
+racevars <- c(White = "B03002_003", 
+              Black = "B03002_004", 
+              Asian = "B03002_006", 
+              Hispanic = "B03002_012")
+
+montgomery <- get_acs(state = "AL", county = "Montgomery", geography = "tract", 
+                  variables = racevars, geometry = TRUE, summary_var = "B03002_001") 
+
+head(montgomery)
+
+montgomery %>%
+  filter(variable=="Black") %>%
+  ggplot(aes(fill = estimate)) + 
+  geom_sf(color = NA) + 
+  scale_fill_viridis_c(option = "magma") +
+  theme_void()
+
+
+montgomery %>%
+  mutate(pct = 100 * (estimate / summary_est)) %>%
+  ggplot(aes(fill = pct)) +
+  facet_wrap(~variable) +
+  geom_sf(color = NA) +
+  scale_fill_viridis_c() +
+  theme_void()
+
+# library(sf)
+# st_write(montgomery, "montgomery.shp")
+
+```
+
+## Modeling: Ecxamining the Data
+```{r, echo=TRUE}
+library(tidycensus)
+library(sf)
+
+mia_counties <- c("Miami-Dade", "Broward", "Palm Beach")
+
+variables_to_get <- c(
+  median_value = "B25077_001",
+  median_rooms = "B25018_001",
+  median_income = "DP03_0062",
+  total_population = "B01003_001",
+  median_age = "B01002_001",
+  pct_college = "DP02_0068P",
+  pct_foreign_born = "DP02_0094P",
+  pct_white = "DP05_0077P",
+  median_year_built = "B25037_001",
+  percent_ooh = "DP04_0046P"
+)
+
+mia_data <- get_acs(
+  geography = "tract",
+  variables = variables_to_get,
+  state = "FL",
+  county = mia_counties,
+  geometry = TRUE,
+  output = "wide",
+  year = 2019
+) %>%
+  select(-NAME) 
+
+
+```
+
+## Modeling: Examining the Data
+```{r, echo=TRUE}
+library(tidyverse)
+library(patchwork)
+
+mhv_map <- ggplot(mia_data, aes(fill = median_valueE)) + 
+  geom_sf(color = NA) + 
+  scale_fill_viridis_c(labels = scales::dollar) + 
+  theme_void() + 
+  labs(fill = "Median home value")
+
+mhv_histogram <- ggplot(mia_data, aes(x = median_valueE)) + 
+  geom_histogram(alpha = 0.5, fill = "navy", color = "navy",
+                 bins = 100) + 
+  theme_minimal() + 
+  scale_x_continuous(labels = scales::label_number_si(accuracy = NULL)) + 
+  labs(x = "Median home value")
+
+mhv_map + mhv_histogram
+
+```
+
+## Modeling: Comparing Distributions
+```{r, echo=TRUE}
+library(tidyverse)
+library(patchwork)
+
+mhv_map_log <- ggplot(mia_data, aes(fill = log(median_valueE))) + 
+  geom_sf(color = NA) + 
+  scale_fill_viridis_c() + 
+  theme_void() + 
+  labs(fill = "Median home\nvalue (log)")
+
+mhv_histogram_log <- ggplot(mia_data, aes(x = log(median_valueE))) + 
+  geom_histogram(alpha = 0.5, fill = "navy", color = "navy",
+                 bins = 100) + 
+  theme_minimal() + 
+  scale_x_continuous() + 
+  labs(x = "Median home value (log)")
+
+mhv_map_log + mhv_histogram_log
+
+```
+
+## Modeling: Looking at Correlations
+```{r, echo=TRUE}
+library(corrr)
+library(units)
+
+mia_data_for_model <- mia_data %>%
+  mutate(pop_density = as.numeric(set_units(total_populationE / st_area(.), "1/km2")),
+         median_structure_age = 2017 - median_year_builtE) %>%
+  select(!ends_with("M")) %>% 
+  rename_with(.fn = ~str_remove(.x, "E$")) %>%
+  na.omit()
+
+mia_estimates <- mia_data_for_model %>%
+  select(-GEOID, -median_value, -median_year_built) %>%
+  st_drop_geometry()
+
+correlations <- correlate(mia_estimates, method = "pearson")
+
+network_plot(correlations)
+```
+
+## Microdata: What are PUMS data?
+- ACS tables are individual responses aggregated to a geography
+- For most purposes, these tables the data we need
+- Census Bureau also releases microdata from the ACS
+  - Individual-level responses to the ACS (what is aggregated to tables)
+  - One row per respondent instead of geography
+  - Public Use Microdata Sample (PUMS)
+- Allows for custom estimates and individual or household level analysis
+
+## Microdata: PUMS variables
+```{r, echo=TRUE}
+# install.packages(c("survey", "srvyr"))
+library(tidyverse)
+library(tidycensus)
+# 2019 ACS 1-year variables
+pums_vars_2019 <- pums_variables %>% 
+  filter(year == 2019, survey == "acs1")
+# only unique varuables
+pums_vars_2019 %>% 
+  distinct(var_code, var_label, data_type, level)
+# only individual level records
+pums_vars_2019 %>% 
+  distinct(var_code, var_label, data_type, level) %>% 
+  filter(level == "person")
+```
+
+## Microdata: get_pums()
+```{r, echo=TRUE}
+ga_pums <- get_pums(
+  variables = c("PUMA", "SEX", "AGEP", "SCHL"),
+  state = "GA",
+  survey = "acs1",
+  year = 2019
+  )
+ga_pums
+```
+## Microdata: Recoding
+```{r, echo=TRUE}
+ga_pums_recoded <- get_pums(
+  variables = c("PUMA", "SEX", "AGEP", "SCHL"),
+  state = "GA",
+  survey = "acs1",
+  year = 2019,
+  recode = TRUE
+  )
+ga_pums_recoded
+```
+## Microdata: Analysis
+```{r, echo=TRUE}
+# total population
+sum(ga_pums_recoded$PWGTP)
+# weighting sample
+ga_pums_recoded %>% 
+  count(PUMA, SEX_label, wt = PWGTP)
+# create a new variable that is whether or not the person has a Bachelor’s degree or above, group by PUMA and sex, then calculate the total population, average age, total with BA or above (only for people 25 and older), and percent with BA or above.
+ga_pums_recoded %>% 
+  mutate(ba_above = SCHL %in% c("21", "22", "23", "24")) %>% 
+  group_by(PUMA, SEX_label) %>% 
+  summarize(
+    total_pop = sum(PWGTP),
+    mean_age = weighted.mean(AGEP, PWGTP),
+    ba_above = sum(PWGTP[ba_above == TRUE & AGEP >= 25]),
+    ba_above_pct = ba_above / sum(PWGTP[AGEP >= 25])
+  )
+```
+
+## Microdata: Calculating Standard Error
+```{r, echo=TRUE}
+ga_pums_rep_weights <- get_pums(
+  variables = c("PUMA", "SEX", "AGEP", "SCHL"),
+  state = "GA",
+  survey = "acs1",
+  year = 2019,
+  recode = TRUE,
+  rep_weights = "person"
+  )
+ga_survey_design <- to_survey(ga_pums_rep_weights)
+
+library(srvyr, warn.conflicts = FALSE)
+
+ga_survey_design %>% 
+  survey_count(PUMA, SEX_label)
+
+survey::svyby(~SEX_label, ~PUMA, design = ga_survey_design, survey::svytotal)
+
+ga_survey_design %>% 
+  mutate(ba_above = SCHL %in% c("21", "22", "23", "24")) %>% 
+  filter(AGEP >= 25) %>% 
+  group_by(PUMA, SEX_label) %>% 
+  summarize(
+    age_25_up = survey_total(vartype = "ci"),
+    ba_above_n = survey_total(ba_above, vartype = "ci"),
+    ba_above_pct = survey_mean(ba_above, vartype = "ci")
+    )
+```
+
+## Microdata: Summary Stats and Regression
+```{r, echo=TRUE}
+ga_pums_to_model <- get_pums(
+  variables = c("PUMA", "WAGP", "JWMNP", "JWTR", "COW", "ESR"),
+  state = "GA",
+  survey = "acs5",
+  year = 2019,
+  rep_weights = "person"
+  )
+
+ga_model_sd <- ga_pums_to_model %>% 
+  filter(
+    ESR == 1,   # civilian employed
+    JWTR != 11, # does not work at home
+    WAGP > 0,   # earned wages last year
+    JWMNP > 0   # commute more than zero min
+    ) %>%
+  mutate(
+    emp_type = case_when(
+      COW %in% c("1", "2")      ~ "private",
+      COW %in% c("3", "4", "5") ~ "public",
+      TRUE                      ~ "self"
+      )
+    ) %>%
+  to_survey()
+
+ga_model_sd %>% 
+  summarize(
+    n              = survey_total(1),
+    mean_wage      = survey_mean(WAGP),
+    median_wage    = survey_median(WAGP),
+    mean_commute   = survey_mean(JWMNP),
+    median_commute = survey_median(JWMNP)
+    )
+
+ga_model_sd %>% 
+  survey_count(emp_type)
+
+model <- survey::svyglm(log(JWMNP) ~ log(WAGP) + emp_type + PUMA, design = ga_model_sd)
+summary(model)
+```
+## Microdata: Mapping
+```{r, echo=TRUE}
+ga_pums_to_model <- get_pums(
+  variables = c("PUMA", "WAGP", "JWMNP", "JWTR", "COW", "ESR"),
+  state = "GA",
+  survey = "acs5",
+  year = 2019,
+  rep_weights = "person"
+  )
+
+ga_model_sd <- ga_pums_to_model %>% 
+  filter(
+    ESR == 1,   # civilian employed
+    JWTR != 11, # does not work at home
+    WAGP > 0,   # earned wages last year
+    JWMNP > 0   # commute more than zero min
+    ) %>%
+  mutate(
+    emp_type = case_when(
+      COW %in% c("1", "2")      ~ "private",
+      COW %in% c("3", "4", "5") ~ "public",
+      TRUE                      ~ "self"
+      )
+    ) %>%
+  to_survey()
+
+ga_model_sd %>% 
+  summarize(
+    n              = survey_total(1),
+    mean_wage      = survey_mean(WAGP),
+    median_wage    = survey_median(WAGP),
+    mean_commute   = survey_mean(JWMNP),
+    median_commute = survey_median(JWMNP)
+    )
+
+ga_model_sd %>% 
+  survey_count(emp_type)
+
+model <- survey::svyglm(log(JWMNP) ~ log(WAGP) + emp_type + PUMA, design = ga_model_sd)
+summary(model)
+```
+## What is IPUMS?
+- Institute for Social Research and Data Innovation at University of Minnesota
+- "IPUMS currently disseminates integrated microdata describing 1.4 billion individuals drawn from over 750 censuses and surveys."
+  - "Sources including the Current Population Survey, the American Community Survey, the National Health Interview Survey, the Demographic and Health Surveys, and an expanding collection of labor force, health, and education surveys."
+- We will focus on ACS data, but same syntax can be applied to CPS and other sources
+
+## What is ipumsr?
+- Add ipumsr logo
+- Created by Greg Freedman Ellis
+- Allows users to:
+  - Read IPUMS data extracts into R
+    - Manage the large size, hierarchical structure, and variable labeling conventions of IPUMS extracts
+  - Use IPUMS metadata to transform data and conduct analysis
+  - In the near future, query the IPUMS API similar to tidycensus
+
+## IPUMS Extracts (Make Two-Column Slide)
+- IPUMS USA
+  - Add IPUMS USA logo
+  - US Census and American Community Survey microdata from 1850 to
+the present
+    - Millions of unique individual records from decennial census and ACS and
+  historical individual records from decennial census from 1850-1940 
+    - https://usa.ipums.org/usa/
+- IPUMS CPS
+  - Add IPUMS CPS logo
+  - Current Population Survey microdata from 1962 to the present
+    - Monthly labor force surveys and supplements
+    - https://cps.ipums.org/cps/
+
+## Creating an Extract (Add sceenshots of IPUMS page)
+- Select variables and samples from IPUMS site
+- Choose format (file type and data structure)
+- Download extract and DDI codebook
+  - Save both files in the same folder
+
+## Reading in Your Extract
+- Package ecosystem
+```{r, echo=TRUE}
+# install.packages("ipumsr")
+# dev version
+
+# if (!require(remotes)) install.packages("remotes")
+# remotes::install_github("mnpopcenter/ipumsr", ref = "api-alpha-dev")
+
+## Tidyverse
+# install.packages("dplyr")
+# install.packages("ggplot2")
+# install.packages("stringr")
+# install.packages("purrr")
+## HTML tables
+# install.packages("DT")
+## gis
+# install.packages("sf")
+
+library(ipumsr)
+library(dplyr)
+library(ggplot2)
+library(stringr)
+library(sf)
+library(purrr)
+
+```
+
+## Reading in Your Extract
+- Import the data
+```{r, echo=TRUE}
+# read in xml codebook
+ddi <- read_ipums_ddi("/Users/victorhaley/QSC2021/usa_00013.xml")
+data <- read_ipums_micro(ddi)
+
+data <- read_ipums_micro("usa_00013.xml")
+
+# data file is just raw, uncoded data, codebook is recipe for assembly
+
+names(ddi)
+
+# print variable names
+
+names(data)
+
+# Not self-explanatory, use metadata to view labels, descriptions, and value labels
+
+ipums_var_label(ddi, PHONE)
+
+ipums_var_desc(ddi, PHONE) %>% strwrap(60)
+
+ipums_val_labels(ddi, PHONE)
+
+```
+## Handling Labels
+- IPUMS value labels don't translate perfectly to the R factor object type
+  - All factor values must be labeled
+  - Factor values must count up from 1
+- ipumsr has functions to help work with values and labels while following R logic
+```{r, echo=TRUE}
+data
+# add factor levels to labels
+as_factor(data)
+# remove labels to show values
+zap_labels(data)
+```
+## Handling Labels: Consolidating
+- lbl_collapse() allows you to take advantage of the hierarchical structure of value labels
+
+```{r, echo=TRUE}
+ipums_val_labels(data$EDUCD)
+
+# collapse last digit to combine categories
+data$EDUCD2 <- lbl_collapse(data$EDUCD, ~.val %/% 10) %>%
+as_factor(ordered = TRUE)
+
+# still too detailed
+data$EDUCD %>%
+lbl_collapse(~.val %/% 10) %>%
+ipums_val_labels()
+
+```
+## Handling Labels: Consolidating
+- We may want to combine some categories (factor levels) to make our data more specific
+```{r, echo=TRUE}
+# expression for filtering variable labels with a particular string
+college_regex <- "^[123] year(s)? of college$"
+data$EDUCD3 <- data$EDUCD %>%
+  # divide values by 10 to make single digit
+lbl_collapse(~.val %/% 10) %>%
+lbl_relabel(
+# combine all less than high school values into one
+lbl(2, "Less than High School") ~.val > 0 & .val < 6,
+lbl(3, "High school") ~.lbl == "Grade 12",
+# classify any amount of college without completion as "Some college"
+lbl(4, "Some college") ~str_detect(.lbl, college_regex),
+# One category for all college degree types
+lbl(5, "College or more") ~.val %in% c(10, 11)
+) %>%
+as_factor()
+# new levels
+levels(data$EDUCD3)
+
+```
+## Removing Missing Data
+- lbl_na_if() allows you to set certain values or labels to missing
+```{r, echo=TRUE}
+ipums_val_labels(data$PHONE)
+
+# convert these values to NAs
+data$PHONE2 <- lbl_na_if(data$PHONE, ~.val %in% c(0, 8)) %>%
+as_factor()
+levels(data$PHONE2)
+
+# works with labels or values
+drop_labels <- c("N/A", "Suppressed (2012 and 2015 ACS)")
+data$PHONE3 <- lbl_na_if(data$PHONE, ~.lbl %in% drop_labels) %>%
+  as_factor()
+
+levels(data$PHONE3)
+```
+## Analysis: Selecting the Right Level, Weight, and Aggregation
+- Data actored, relabeled and ready for graphing
+- Extracts are samples, come with household and person levels and weights
+  - Have to be accounted for
+- Use person weight to estimate share of people with phones by year
+```{r, echo=TRUE}
+# prepare data for graphing by grouping by year, and using the person weight to calculate a weighted mean. This yields the estimated share of the Minnesota population who have a phone
+graph_data <- data %>%
+group_by(YEAR) %>%
+summarize(
+`% with phone` = weighted.mean(
+PHONE2 == "Yes, phone available", PERWT, na.rm = TRUE
+),
+.groups = "drop"
+)
+
+graph_data2 <- data %>%
+group_by(YEAR, EDUCD3) %>%
+summarize(
+`% with phone` = weighted.mean(
+PHONE2 == "Yes, phone available", PERWT, na.rm = TRUE
+),
+.groups = "drop"
+)
+
+```
+
+## Analysis: Plotting the Results
+```{r, echo=TRUE}
+# Plotting one variable year over year
+ggplot(graph_data, aes(x = YEAR, y = `% with phone`)) +
+geom_point() +
+geom_line() +
+labs(
+title = "Percent of Minnesota with phone line",
+subtitle = paste0("Data source: ", ddi$ipums_project),
+# include caption with variable description
+caption = paste(
+strwrap(ipums_var_desc(ddi, PHONE), 90),
+collapse = "\n"
+)
+)
+```
+
+## Analysis: Plotting the Results
+```{r, echo=TRUE}
+# Plotting one variable year over year with individual plots for education level
+ggplot(graph_data2, aes(x = YEAR, y = `% with phone`)) +
+  geom_point() +
+  geom_line() +
+  labs(
+    title = "Percent of Minnesota with phone line by education",
+    subtitle = paste0("Data source: ", ddi$ipums_project)
+    ) +
+  facet_wrap(~ EDUCD3)
+```
+## ipumsr and Mapping: Loading Spatial Data
+- show screenshot of where to download IPUMS spatial files
+- IPUMS provides geographic boundary files for IPUMS USA and other sources
+  - CONSPUMA (Consistent Public Use Microdata Area)
+- ipumsr provides support for both sf and sp data (we will use sf)
+- Load with the ipums_read_sf() function 
+```{r, echo=TRUE}
+shape_data <- read_ipums_sf("shape/")
+as_tibble(shape_data)
+```
+
+## ipumsr and Mapping: Joining Extract and Spatial Data
+- ipumsr has functions for merging extracts with spatial data
+```{r, echo=TRUE}
+# group extract data by CONSPUMA and year, create weighted variable, and ungroup
+conspuma_data <- data %>%
+group_by(CONSPUMA, YEAR) %>%
+summarize(
+`% with phone` = weighted.mean(
+PHONE2 == "Yes, phone available", PERWT, na.rm = TRUE
+),
+.groups = "drop"
+)
+# join extract data with spatial data using CONSPUMA id
+conspuma_data <- ipums_shape_inner_join(
+conspuma_data,
+shape_data,
+by = "CONSPUMA"
+) 
+
+```
+
+## Mapping with ipumsr, ggplot2, and sf
+```{r, echo=TRUE}
+# filter data to show every decade
+graph_data <- conspuma_data %>%
+filter(YEAR %in% c(1980, 1990, 2000, 2010))
+# color CONSPUMA polygons by % with phone value
+ggplot(graph_data, aes(fill = `% with phone`)) +
+# make one plot for each year
+facet_wrap(~YEAR) +
+geom_sf() +
+# remove grid lines and coordinates
+  theme_void()
+```
+
+## IPUMS API
+- Currently in internal testing
+- Beta testing before the end of 2021
+- IPUMS USA public launch early 2022
+- Define and submit extract requests
+- Check extract status or "wait" for an extract to finish
+- Download completed extracts
+- Get info on past extracts
+- Share extract definitions
+
+
+## Other Data Sources
+- NHGIS
+- Longitudinal and Employer-Household Dynamics (LEHD) Origin-Destination Employment Statistics (LODES) data
+- Small Area Health Insurance Estimates
+- Economic Census
+- Bureau of Labor Statistics
+- CPS
+- LAUS
+- USDA
+- Department of Housing and Urban Development Comprehensive Affordable Housing Strategy (CHAS)
+
+## Other Applications
+- Interactive Mapping
+- Quantiles and Categories
+- Custom Color Palettes
+- Graduated Symbols
+- Dot Density
+- Multivariate Mapping
+- Mapping with Census and non-Census Data
+- Spatial Subsets
+- Spatial Joins
+- Distance and Proximity
+- Interpolation
+- Spatial Clusters, Dependency, & Autocorrelation
+- Spatial Regression
+- Historical Analysis
+- International Comparisons
+- Tracking Individual and Household Change
+- Using Replicant Weights
+
